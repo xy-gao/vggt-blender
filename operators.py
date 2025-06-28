@@ -3,7 +3,7 @@ from pathlib import Path
 import os
 import torch
 import numpy as np
-from .utils import run_model, import_point_cloud
+from .utils import run_model, import_point_cloud, create_cameras
 
 add_on_path = Path(__file__).parent
 MODELS_DIR = os.path.join(add_on_path, 'models')
@@ -61,6 +61,8 @@ class GeneratePointCloudOperator(bpy.types.Operator):
             predictions = run_model(input_folder, model)
             import_point_cloud(predictions)
             self.report({'INFO'}, "Point cloud generated and imported successfully.")
+            create_cameras(predictions)
+            self.report({'INFO'}, "Cameras generated successfully.")
         except Exception as e:
             self.report({'ERROR'}, f"Failed to generate point cloud: {e}")
             return {'CANCELLED'}

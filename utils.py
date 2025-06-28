@@ -3,6 +3,8 @@ import glob
 import os
 import numpy as np
 import bpy
+import math
+from mathutils import Matrix
 from vggt.utils.load_fn import load_and_preprocess_images
 from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 from vggt.utils.geometry import unproject_depth_map_to_point_map
@@ -85,3 +87,78 @@ def import_point_cloud(d):
     node_group.links.new(input_node.outputs['Geometry'], mesh_to_points.inputs['Mesh'])
     node_group.links.new(mesh_to_points.outputs['Points'], set_material_node.inputs['Geometry'])
     node_group.links.new(set_material_node.outputs['Geometry'], output_node.inputs['Geometry'])
+
+def create_cameras(predictions, image_width=None, image_height=None):
+    """
+    Create Blender cameras from extrinsic and intrinsic parameters.
+    
+    Args:
+        predictions (dict): Dictionary with 'extrinsic' and 'intrinsic' keys, each containing
+                           lists of NumPy arrays (3x4 for extrinsic, 3x3 for intrinsic).
+        image_width (int, optional): Image width in pixels. Defaults to scene render resolution.
+        image_height (int, optional): Image height in pixels. Defaults to scene render resolution.
+    """
+    # Get the current scene
+    scene = bpy.context.scene
+    
+    # Use scene render resolution if image_width or image_height not provided
+    if image_width is None:
+        image_width = scene.render.resolution_x
+    if image_height is None:
+        image_height = scene.render.resolution_y
+    
+    # Set pixel aspect ratio based on the first camera's intrinsic matrix
+    K0 = predictions["intrinsic"][0]
+    pixel_aspect_y = K0[1,1] / K0[0,0]
+    scene.render.pixel_aspect_x = 1.0
+    scene.render.pixel_aspect_y = float(pixel_aspect_y)
+    
+    # Ensure equal length of extrinsic and intrinsic lists
+    num_cameras = len(predictions["extrinsic"])
+    if len(predictions["intrinsic"]) != num_cameras:
+        raise ValueError("Extrinsic and intrinsic lists must have the same length")
+    
+    # Define coordinate system transformation matrix (OpenCV to Blender)
+    T = np.diag([1.0, -1.0, -1.0, 1.0])  # 180-degree rotation around X-axis
+    
+    # Create cameras
+    for i in range(num_cameras):
+        # Create new camera data
+        cam_data = bpy.data.cameras.new(name=f"Camera_{i}")
+        
+        # Set intrinsic parameters
+        K = predictions["intrinsic"][i]
+        f_x = K[0,0]
+        c_x = K[0,2]
+        c_y = K[1,2]
+        
+        # Set sensor width (standard full-frame sensor size)
+        sensor_width = 36.0  # in mm
+        cam_data.sensor_width = sensor_width
+        
+        # Compute focal length in mm
+        cam_data.lens = (f_x / image_width) * sensor_width
+        
+        # Set principal point shifts
+        cam_data.shift_x = 0
+        cam_data.shift_y = 0
+        
+        # Create camera object and link to scene
+        cam_obj = bpy.data.objects.new(name=f"Camera_{i}", object_data=cam_data)
+        scene.collection.objects.link(cam_obj)
+        
+        # Set extrinsic parameters
+        ext = predictions["extrinsic"][i]
+        # Convert 3x4 extrinsic matrix to 4x4
+        E = np.vstack((ext, [0, 0, 0, 1]))
+        # Compute inverse
+        E_inv = np.linalg.inv(E)
+        # Compute camera-to-world matrix
+        M = np.dot(E_inv, T)
+        # Convert to Blender Matrix
+        cam_obj.matrix_world = Matrix(M.tolist())
+        # Create a 90-degree rotation matrix around the Z-axis (counter-clockwise)
+        R = Matrix.Rotation(math.radians(-90), 4, 'X')
+
+        # Apply the rotation to the camera's world matrix
+        cam_obj.matrix_world = R @ cam_obj.matrix_world
