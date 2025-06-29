@@ -6,11 +6,14 @@ Input an image folder which contains single or multiple images, then you will ge
 This blender addon is based on [vggt](https://github.com/facebookresearch/vggt). Be careful that vggt is under non-commercial license.
 
 ## Usage
-1. Download vggt model from operation panel.
-2. select an image folder.
-3. Generate.
+1. Select an image folder.
+2. Generate.
 
-https://github.com/user-attachments/assets/7c98bdb6-5f0f-4fb2-a9c5-7a4f7e9e553e
+
+
+https://github.com/user-attachments/assets/cd544b1a-7665-4275-8710-a1c1f28c8002
+
+
 
 ## Installation (only the first time)
 1. Download Zip from this github repo.
